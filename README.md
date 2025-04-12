@@ -27,7 +27,15 @@ A modern shopping list application built with Flutter that helps users manage th
 
 ## 📱 Screenshots
 
-[Add your app screenshots here]
+![App home page](image-1.png)
+
+![Create a new list](image-2.png)
+
+![Adding shopping item](image-3.png)
+
+![Shopping list page](image-4.png)
+
+
 
 ## 🛠️ Getting Started
 

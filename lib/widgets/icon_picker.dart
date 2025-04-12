@@ -62,6 +62,7 @@ class IconPickerWidget extends StatelessWidget {
     Icons.room_service,
     Icons.spa,
   ];
+  
 
   @override
   Widget build(BuildContext context) {
