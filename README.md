@@ -27,15 +27,16 @@ A modern shopping list application built with Flutter that helps users manage th
 
 ## 📱 Screenshots
 
-![App home page](image-1.png)
-
-![Create a new list](image-2.png)
-
-![Adding shopping item](image-3.png)
-
-![Shopping list page](image-4.png)
-
-
+<table>
+  <tr>
+    <td><img src="image-1.png" width="200" alt="App home page"/></td>
+    <td><img src="image-2.png" width="200" alt="Create a new list"/></td>
+  </tr>
+  <tr>
+    <td><img src="image-3.png" width="200" alt="Adding shopping item"/></td>
+    <td><img src="image-4.png" width="200" alt="Shopping list page"/></td>
+  </tr>
+</table>
 
 ## 🛠️ Getting Started
 
@@ -94,19 +95,6 @@ lib/
 ├── widgets/           # Reusable UI components
 └── main.dart          # App entry point
 ```
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome! Feel free to check [issues page](link-to-your-issues-page).
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👤 Author
-
-Your Name
-- GitHub: [@yourusername](https://github.com/yourusername)
 
 ## ⭐ Show your support
 
