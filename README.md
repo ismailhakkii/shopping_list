@@ -51,7 +51,7 @@ A modern shopping list application built with Flutter that helps users manage th
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/yourusername/shopping_list.git
+git clone https://github.com/ismailhakkii/shopping_list.git
 ```
 
 2. Navigate to project directory:
