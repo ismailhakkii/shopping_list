@@ -1,8 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'controllers/shopping_list_controller.dart';
+import 'package:shopping_list/controllers/shopping_list_controller.dart';
 // import 'views/shopping_list_view.dart'; // Artık direkt bunu çağırmıyoruz
-import 'views/splash_screen.dart'; 
+
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Loading...'),
+      ),
+    );
+  }
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized(); // Gerekli olabilir

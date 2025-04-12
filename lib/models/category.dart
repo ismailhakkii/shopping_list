@@ -1,40 +1,43 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
 
 class Category {
-  String id;
-  String name;
-  // İkon ve renk ekleyerek görselleştirelim
-  IconData iconData;
-  Color color;
+  final String id;
+  final String name;
+  final IconData iconData;
+  final Color color;
 
-  Category({
+  const Category({
     required this.id,
     required this.name,
-    this.iconData = Icons.category, // Varsayılan ikon
-    this.color = Colors.blueGrey,  // Varsayılan renk
+    required this.iconData,
+    required this.color,
   });
 
-  // Renk ve ikonu da JSON'a/JSON'dan çevirme (IconData biraz dolaylı olacak)
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'iconCodePoint': iconData.codePoint, // İkon kod noktası
-        'iconFontFamily': iconData.fontFamily, // İkon font ailesi
-        'colorValue': color.value, // Renk değeri
-      };
+    'id': id,
+    'name': name,
+    'iconData': iconData.codePoint,
+    'color': color.value,
+  };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        iconData: IconData(
-          json['iconCodePoint'] as int? ?? Icons.category.codePoint,
-          fontFamily: json['iconFontFamily'] as String? ?? Icons.category.fontFamily,
-        ),
-        color: Color(json['colorValue'] as int? ?? Colors.blueGrey.value),
-      );
+    id: json['id'],
+    name: json['name'],
+    iconData: IconData(json['iconData'], fontFamily: 'MaterialIcons'),
+    color: Color(json['color']),
+  );
 
-   String toJsonString() => jsonEncode(toJson());
-   factory Category.fromJsonString(String jsonString) =>
-      Category.fromJson(jsonDecode(jsonString) as Map<String, dynamic>);
+  Category copyWith({
+    String? id,
+    String? name,
+    IconData? iconData,
+    Color? color,
+  }) {
+    return Category(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      iconData: iconData ?? this.iconData,
+      color: color ?? this.color,
+    );
+  }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
+// Removed intl package import
 import '../controllers/shopping_list_controller.dart';
 import '../models/category.dart';
 import '../models/shopping_item.dart';
@@ -9,6 +9,10 @@ import '../providers/theme_provider.dart';
 import '../widgets/color_picker.dart';
 import '../widgets/icon_picker.dart';
 
+// Added a custom date formatting function
+String formatDateTime(DateTime dateTime) {
+  return "${dateTime.day.toString().padLeft(2, '0')}.${dateTime.month.toString().padLeft(2, '0')}.${dateTime.year} ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+}
 
 class ShoppingListView extends StatefulWidget {
   const ShoppingListView({super.key});
@@ -18,7 +22,7 @@ class ShoppingListView extends StatefulWidget {
 }
 
 class _ShoppingListViewState extends State<ShoppingListView> with TickerProviderStateMixin {
-  final _dateFormat = DateFormat('dd.MM.yyyy HH:mm');
+  // Removed _dateFormat
    // Checked animasyonu için kontrolcüler
    final Map<String, AnimationController> _checkAnimControllers = {};
    final Map<String, Animation<double>> _checkAnimations = {};
@@ -78,11 +82,24 @@ class _ShoppingListViewState extends State<ShoppingListView> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    // Aktif liste kontrolü
+    if (_controller.activeListId == null) {
+      return const Scaffold(
+        body: Center(
+          child: Text('Lütfen bir liste seçin veya oluşturun'),
+        ),
+      );
+    }
+
+    final activeList = _controller.allLists.firstWhere(
+      (list) => list.id == _controller.activeListId,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: _isSearching 
           ? _buildSearchField()
-          : const Text('Alışveriş Listem', style: TextStyle(fontWeight: FontWeight.bold)),
+          : Text(activeList.name, style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           // Arama butonu
           IconButton(
@@ -213,7 +230,7 @@ class _ShoppingListViewState extends State<ShoppingListView> with TickerProvider
                 leading: const Icon(Icons.history),
                 title: Text(list.name),
                 subtitle: Text(
-                  '${list.items.length} öğe • ${_dateFormat.format(list.createdAt)}',
+                  '${list.items.length} öğe • ${formatDateTime(list.createdAt)}',
                 ),
                 trailing: Text(
                   '%${list.completionPercentage.toStringAsFixed(0)} tamamlandı',
@@ -246,7 +263,10 @@ class _ShoppingListViewState extends State<ShoppingListView> with TickerProvider
   }
 
   Widget _buildProgressIndicator() {
-    final completionPercentage = _controller.getCompletionPercentage(_controller.activeListId);
+    final listId = _controller.activeListId;
+    if (listId == null) return const SizedBox.shrink();
+    
+    final completionPercentage = _controller.getCompletionPercentage(listId);
     return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -676,6 +696,34 @@ class _ShoppingListViewState extends State<ShoppingListView> with TickerProvider
                           ],
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Action butonları
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('İptal'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            if (textController.text.isNotEmpty && selectedCategoryId != null) {
+                              controller.addItem(textController.text, selectedCategoryId!);
+                              Navigator.pop(context);
+                              // Başarılı mesajı göster
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('${textController.text} eklendi'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Ekle'),
+                        ),
+                      ],
                     ),
                   ],
                 ),

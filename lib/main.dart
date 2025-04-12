@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'controllers/shopping_list_controller.dart';
-import 'views/shopping_list_view.dart';
+import 'providers/theme_provider.dart';
+import 'views/list_selection_view.dart'; // Yeni view
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
@@ -12,17 +14,20 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Controller'ı Provider ile sağlıyoruz
-    return ChangeNotifierProvider(
-      create: (context) => ShoppingListController(), // Controller örneğini oluştur
-      child: MaterialApp(
-        title: 'Alışveriş Listesi',
-        theme: ThemeData(
-          primarySwatch: Colors.blue, // Ana renk teması
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        home: const ShoppingListView(), // Başlangıç ekranı olarak View'ı göster
-        debugShowCheckedModeBanner: false, // Debug etiketini kaldır
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ShoppingListController()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          return MaterialApp(
+            title: 'Alışveriş Listem',
+            theme: themeProvider.themeData,
+            home: const ListSelectionView(), // ShoppingListView yerine ListSelectionView kullanıyoruz
+            debugShowCheckedModeBanner: false,
+          );
+        },
       ),
     );
   }
