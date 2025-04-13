@@ -6,334 +6,413 @@ import '../models/shopping_list_model.dart';
 import 'dart:convert';
 
 class ShoppingListController extends ChangeNotifier {
-  static const String _prefsCategoriesKey = 'categories';
-  static const String _prefsListsKey = 'shopping_lists';
-  
-  // Liste yönetimi
-  final Map<String, List<ShoppingItem>> _shoppingLists = {};
-  String? _activeListId;
-  
-  // Tüm listelerin bilgisi
-  final List<ShoppingList> _allLists = [];
-  List<ShoppingList> get allLists => _allLists;
-  
-  // Kategoriler
+  final List<ShoppingList> _lists = [];
   final List<Category> _categories = [];
-  List<Category> get categories => _categories;
-  
-  // Geçmiş listeler
-  List<ShoppingList> _listHistory = [];
-  List<ShoppingList> get listHistory => _listHistory;
-  
-  // Silinen öğeler
-  final List<ShoppingItem> _deletedItems = [];
-  
-  // Getter'lar
-  List<ShoppingItem> get items => _shoppingLists[_activeListId] ?? [];
-  String? get activeListId => _activeListId;
-  
-  // Arama için
-  String _searchTerm = '';
+  ShoppingList? _currentList;
+  final SharedPreferences _prefs;
+  bool _isLoading = true;
+
+  ShoppingListController(this._prefs) {
+    Future.microtask(() => _loadData());
+  }
+
+  // Getters
+  List<ShoppingList> get lists => List.unmodifiable(_lists);
+  List<Category> get categories => List.unmodifiable(_categories);
+  ShoppingList? get currentList => _currentList;
+  bool get hasLists => _lists.isNotEmpty;
+  List<ShoppingItem> get items => _currentList?.items ?? [];
+  String? get activeListId => _currentList?.id; // Null olabileceğini belirtiyoruz
+  List<ShoppingList> get allLists => List.unmodifiable(_lists);
+  bool get isLoading => _isLoading;
   String get searchTerm => _searchTerm;
-  
-  // Kategori bazlı öğeler
-  Map<String, List<ShoppingItem>> get itemsByCategory {
-    final Map<String, List<ShoppingItem>> grouped = {};
-    for (final item in items) {
-      if (!grouped.containsKey(item.categoryId)) {
-        grouped[item.categoryId] = [];
+  List<ShoppingList> get listHistory => _listHistory;
+
+  // Fields
+  String _searchTerm = '';
+  final List<ShoppingList> _listHistory = [];
+  ShoppingItem? _lastDeletedItem;
+
+  // Load saved data
+  Future<void> _loadData() async {
+    try {
+      // Load categories
+      final categoriesJson = _prefs.getStringList('categories') ?? [];
+      _categories.clear();
+      if (categoriesJson.isEmpty) {
+        // Varsayılan kategorileri ekle
+        _categories.addAll([
+          Category(
+            id: 'groceries',
+            name: 'Gıda',
+            iconData: Icons.shopping_basket,
+            color: Colors.green,
+          ),
+          Category(
+            id: 'electronics',
+            name: 'Elektronik',
+            iconData: Icons.devices,
+            color: Colors.blue,
+          ),
+          Category(
+            id: 'clothing',
+            name: 'Giyim',
+            iconData: Icons.checkroom,
+            color: Colors.purple,
+          ),
+          Category(
+            id: 'home',
+            name: 'Ev',
+            iconData: Icons.home,
+            color: Colors.orange,
+          ),
+        ]);
+        await _saveData(); // Varsayılan kategorileri kaydet
+      } else {
+        _categories.addAll(
+          categoriesJson
+              .map((json) => Category.fromJson(Map<String, dynamic>.from(
+                  const JsonDecoder().convert(json))))
+              .toList(),
+        );
       }
-      grouped[item.categoryId]!.add(item);
+
+      // Load shopping lists
+      final listsJson = _prefs.getStringList('shopping_lists') ?? [];
+      _lists.clear();
+      _lists.addAll(
+        listsJson
+            .map((json) => ShoppingList.fromJson(
+                Map<String, dynamic>.from(const JsonDecoder().convert(json))))
+            .toList(),
+      );
+
+      // Load current list
+      final currentListId = _prefs.getString('current_list_id');
+      if (currentListId != null && _lists.isNotEmpty) {
+        _currentList = _lists.firstWhere(
+          (list) => list.id == currentListId,
+          orElse: () => _lists.first,
+        );
+      }
+
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Veri yükleme hatası: $e');
+      _isLoading = false;
+      notifyListeners();
     }
-    return grouped;
   }
 
-  // Constructor
-  ShoppingListController() {
-    _loadData();
+  // Save all data
+  Future<void> _saveData() async {
+    try {
+      // Save categories
+      await _prefs.setStringList(
+        'categories',
+        _categories
+            .map((category) => const JsonEncoder().convert(category.toJson()))
+            .toList(),
+      );
+
+      // Save shopping lists
+      await _prefs.setStringList(
+        'shopping_lists',
+        _lists
+            .map((list) => const JsonEncoder().convert(list.toJson()))
+            .toList(),
+      );
+
+      // Save current list ID
+      if (_currentList != null) {
+        await _prefs.setString('current_list_id', _currentList!.id);
+      } else {
+        await _prefs.remove('current_list_id');
+      }
+    } catch (e) {
+      debugPrint('Veri kaydetme hatası: $e');
+      // Handle error appropriately
+    }
   }
 
-  // Kategori işlemleri
-  Category getCategoryById(String id) {
-    return _categories.firstWhere(
-      (cat) => cat.id == id,
-      orElse: () => Category(
-        id: 'uncategorized',
-        name: 'Kategorisiz',
-        iconData: Icons.help_outline,
-        color: Colors.grey,
-      ),
-    );
-  }
-
-  void addCustomCategory(String name, IconData iconData, Color color) {
-    final newCategory = Category(
-      id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-      name: name,
-      iconData: iconData,
-      color: color,
-    );
-    _categories.add(newCategory);
-    _saveData();
-    notifyListeners();
-  }
-
-  // Liste işlemleri
-  void createNewList(String name) {
-    final listId = 'list_${DateTime.now().millisecondsSinceEpoch}';
-    _shoppingLists[listId] = [];
-    
+  // List management
+  Future<void> createList(String name, {int? icon, Color? color}) async {
     final newList = ShoppingList(
-      id: listId,
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: name,
       items: [],
       createdAt: DateTime.now(),
-      icon: Icons.list_alt.codePoint,
+      icon: icon,
+      color: color,
     );
-    
-    _allLists.add(newList);
-    _activeListId = listId;
-    _saveData();
+
+    _lists.add(newList);
+    _currentList = newList;
+    await _saveData();
     notifyListeners();
   }
 
-  void switchList(String listId) {
-    if (_shoppingLists.containsKey(listId)) {
-      _activeListId = listId;
+  Future<void> updateList(ShoppingList list) async {
+    final index = _lists.indexWhere((l) => l.id == list.id);
+    if (index != -1) {
+      _lists[index] = list;
+      if (_currentList?.id == list.id) {
+        _currentList = list;
+      }
+      await _saveData();
       notifyListeners();
     }
   }
 
-  void deleteList(String listId) {
-    _shoppingLists.remove(listId);
-    _allLists.removeWhere((list) => list.id == listId);
-    if (_activeListId == listId) {
-      _activeListId = _shoppingLists.isNotEmpty ? _shoppingLists.keys.first : null;
+  Future<void> deleteList(String listId) async {
+    _lists.removeWhere((list) => list.id == listId);
+    if (_currentList?.id == listId) {
+      _currentList = _lists.isNotEmpty ? _lists.first : null;
     }
-    _saveData();
+    await _saveData();
     notifyListeners();
   }
 
-  void clearCurrentList() {
-    _shoppingLists[_activeListId]?.clear();
-    _saveData();
+  Future<void> setCurrentList(String listId) async {
+    final list = _lists.firstWhere((l) => l.id == listId);
+    _currentList = list;
+    await _saveData();
     notifyListeners();
   }
 
-  // Öğe işlemleri
-  void addItem(String name, String categoryId) {
-    if (name.trim().isEmpty || _activeListId == null) return;
-    
-    final newItem = ShoppingItem(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name.trim(),
-      categoryId: categoryId,
-    );
-    
-    _shoppingLists[_activeListId]?.add(newItem);
-    
-    // Aktif listeyi güncelle
-    final index = _allLists.indexWhere((list) => list.id == _activeListId);
+  // Category management
+  Future<void> addCategory(Category category) async {
+    if (!_categories.any((c) => c.id == category.id)) {
+      _categories.add(category);
+      await _saveData();
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateCategory(Category category) async {
+    final index = _categories.indexWhere((c) => c.id == category.id);
     if (index != -1) {
-      _allLists[index] = ShoppingList(
-        id: _allLists[index].id,
-        name: _allLists[index].name,
-        items: _shoppingLists[_activeListId] ?? [],
-        createdAt: _allLists[index].createdAt,
-        icon: _allLists[index].icon,
+      _categories[index] = category;
+      await _saveData();
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteCategory(String categoryId) async {
+    _categories.removeWhere((category) => category.id == categoryId);
+    // Update items with deleted category
+    for (var list in _lists) {
+      for (var item in list.items) {
+        if (item.categoryId == categoryId) {
+          item.categoryId = 'uncategorized';
+        }
+      }
+    }
+    await _saveData();
+    notifyListeners();
+  }
+
+  // Item management
+  Future<void> addShoppingItem(ShoppingItem item) async {
+    if (_currentList != null) {
+      final updatedList = _currentList!.copyWith(
+        items: [..._currentList!.items, item],
       );
-    }
-    
-    _saveData();
-    notifyListeners();
-  }
-
-  void toggleItemStatus(String id) {
-    final items = _shoppingLists[_activeListId];
-    if (items == null) return;
-    
-    final index = items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      items[index].isBought = !items[index].isBought;
-      _saveData();
-      notifyListeners();
+      await updateList(updatedList);
     }
   }
 
-  ShoppingItem? removeItem(String id) {
-    final items = _shoppingLists[_activeListId];
-    if (items == null) return null;
-    
-    final index = items.indexWhere((item) => item.id == id);
-    if (index != -1) {
-      final item = items.removeAt(index);
-      _deletedItems.add(item);
-      _saveData();
-      notifyListeners();
-      return item;
+  // Öğe ekleme - String ve categoryId parametreleriyle
+  Future<void> addItem(String name, String categoryId) async {
+    if (_currentList != null) {
+      final newItem = ShoppingItem(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        name: name,
+        categoryId: categoryId,
+        createdAt: DateTime.now(),
+      );
+      await addShoppingItem(newItem);
+    }
+  }
+
+  Future<ShoppingItem?> removeItem(String itemId) async {
+    if (_currentList != null) {
+      final items = List<ShoppingItem>.from(_currentList!.items);
+      final index = items.indexWhere((item) => item.id == itemId);
+      if (index != -1) {
+        _lastDeletedItem = items[index];
+        items.removeAt(index);
+        final updatedList = _currentList!.copyWith(items: items);
+        await updateList(updatedList);
+        return _lastDeletedItem;
+      }
     }
     return null;
   }
 
-  // Arama işlemleri
+  Future<void> updateItem(ShoppingItem item) async {
+    if (_currentList != null) {
+      final items = List<ShoppingItem>.from(_currentList!.items);
+      final index = items.indexWhere((i) => i.id == item.id);
+      if (index != -1) {
+        items[index] = item;
+        final updatedList = _currentList!.copyWith(items: items);
+        await updateList(updatedList);
+      }
+    }
+  }
+
+  Future<void> deleteItem(String itemId) async {
+    if (_currentList != null) {
+      final items = _currentList!.items.where((item) => item.id != itemId).toList();
+      final updatedList = _currentList!.copyWith(items: items);
+      await updateList(updatedList);
+    }
+  }
+
+  Future<void> toggleItemStatus(String itemId) async {
+    if (_currentList != null) {
+      final items = List<ShoppingItem>.from(_currentList!.items);
+      final index = items.indexWhere((item) => item.id == itemId);
+      if (index != -1) {
+        final item = items[index];
+        if (item.isBought) {
+          item.markAsNotBought();
+        } else {
+          item.markAsBought();
+        }
+        final updatedList = _currentList!.copyWith(items: items);
+        await updateList(updatedList);
+      }
+    }
+  }
+
+  // Statistics and filtering
+  List<ShoppingItem> getItemsByCategory(String categoryId) {
+    return _currentList?.items
+            .where((item) => item.categoryId == categoryId)
+            .toList() ??
+        [];
+  }
+
+  int getCompletedItemsCount() {
+    return _currentList?.items.where((item) => item.isBought).length ?? 0;
+  }
+
+  double getCompletionPercentage() {
+    if (_currentList == null) return 0.0;
+    final totalItems = _currentList!.items.length;
+    if (totalItems == 0) return 0.0;
+    final completedItems = _currentList!.items.where((item) => item.isBought).length;
+    return (completedItems / totalItems) * 100;
+  }
+
+  // Sort and filter options
+  void sortItemsByName({bool ascending = true}) {
+    if (_currentList != null) {
+      final items = List<ShoppingItem>.from(_currentList!.items)
+        ..sort((a, b) => ascending
+            ? a.name.compareTo(b.name)
+            : b.name.compareTo(a.name));
+      final updatedList = _currentList!.copyWith(items: items);
+      updateList(updatedList);
+    }
+  }
+
+  void sortItemsByCategory() {
+    if (_currentList != null) {
+      final items = List<ShoppingItem>.from(_currentList!.items)
+        ..sort((a, b) => a.categoryId.compareTo(b.categoryId));
+      final updatedList = _currentList!.copyWith(items: items);
+      updateList(updatedList);
+    }
+  }
+
+  List<ShoppingItem> filterItems({
+    String? searchQuery,
+    String? categoryId,
+    bool? isBought,
+  }) {
+    if (_currentList == null) return [];
+
+    return _currentList!.items.where((item) {
+      if (searchQuery != null &&
+          !item.name.toLowerCase().contains(searchQuery.toLowerCase())) {
+        return false;
+      }
+      if (categoryId != null && item.categoryId != categoryId) {
+        return false;
+      }
+      if (isBought != null && item.isBought != isBought) {
+        return false;
+      }
+      return true;
+    }).toList();
+  }
+
   void updateSearchTerm(String term) {
     _searchTerm = term;
     notifyListeners();
   }
 
-  List<ShoppingItem> get filteredItems {
-    if (_searchTerm.isEmpty) return items;
-    return items.where((item) =>
-      item.name.toLowerCase().contains(_searchTerm.toLowerCase()) ||
-      getCategoryById(item.categoryId).name.toLowerCase().contains(_searchTerm.toLowerCase())
-    ).toList();
+  Future<void> createNewList(String name) async {
+    await createList(name);
   }
 
-  // Geri alma işlemleri
+  void clearCurrentList() {
+    if (_currentList != null) {
+      final clearedList = _currentList!.copyWith(items: []);
+      updateList(clearedList);
+    }
+  }
+
   void undoDelete() {
-    if (_deletedItems.isEmpty) return;
-    
-    final item = _deletedItems.removeLast();
-    _shoppingLists[_activeListId]?.add(item);
-    _saveData();
-    notifyListeners();
+    if (_lastDeletedItem != null && _currentList != null) {
+      addShoppingItem(_lastDeletedItem!);
+      _lastDeletedItem = null;
+      notifyListeners();
+    }
   }
 
-  // Geçmiş işlemleri
-  void saveToHistory() {
-    if (items.isEmpty) return;
-    
-    _listHistory.add(ShoppingList(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: 'Liste ${_listHistory.length + 1}',
-      items: List.from(items),
-      createdAt: DateTime.now(),
-    ));
-    _saveData();
+  Future<bool> initializeData() async {
+    await _loadData();
+    return true;
+  }
+
+  Map<String, List<ShoppingItem>> get itemsByCategory {
+    if (_currentList == null) return {};
+    return _currentList!.itemsByCategory;
+  }
+
+  double getListCompletionPercentage(String listId) {
+    final list = _lists.firstWhere((l) => l.id == listId);
+    return list.completionPercentage;
   }
 
   void restoreFromHistory(String listId) {
-    final historicList = _listHistory.firstWhere((list) => list.id == listId);
-    _shoppingLists[_activeListId]?.clear();
-    _shoppingLists[_activeListId]?.addAll(historicList.items);
-    _saveData();
-    notifyListeners();
+    // Implement restore functionality
   }
 
-  // İlerleme yüzdesi hesaplama
-  double getCompletionPercentage(String listId) {
-    final items = _shoppingLists[listId];
-    if (items == null || items.isEmpty) return 0;
-    return (items.where((item) => item.isBought).length / items.length) * 100;
-  }
-
-  // Veri kaydetme/yükleme
-  Future<void> _saveData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Kategorileri kaydet
-    await prefs.setStringList(
-      _prefsCategoriesKey,
-      _categories.map((c) => jsonEncode(c.toJson())).toList(),
-    );
-    
-    // Tüm listeleri kaydet
-    await prefs.setStringList(
-      _prefsListsKey,
-      _allLists.map((list) => jsonEncode(list.toJson())).toList(),
-    );
-    
-    // Her listenin öğelerini kaydet
-    for (final listId in _shoppingLists.keys) {
-      await prefs.setStringList(
-        'list_items_$listId',
-        _shoppingLists[listId]?.map((item) => jsonEncode(item.toJson())).toList() ?? [],
-      );
-    }
-    
-    // Liste geçmişini kaydet
-    await prefs.setStringList(
-      'list_history',
-      _listHistory.map((list) => jsonEncode(list.toJson())).toList(),
-    );
-    
-    // Silinen öğeleri kaydet
-    await prefs.setStringList(
-      'deleted_items',
-      _deletedItems.map((item) => jsonEncode(item.toJson())).toList(),
+  Category getCategoryById(String categoryId) {
+    return _categories.firstWhere(
+      (c) => c.id == categoryId,
+      orElse: () => Category(
+        id: 'uncategorized',
+        name: 'Kategorisiz',
+        color: Colors.grey,
+        iconData: Icons.category_outlined,
+      ),
     );
   }
 
-  Future<void> _loadData() async {
-    final prefs = await SharedPreferences.getInstance();
-    
-    // Kategorileri yükle
-    final categoriesJson = prefs.getStringList(_prefsCategoriesKey);
-    if (categoriesJson != null) {
-      _categories.clear();
-      _categories.addAll(
-        categoriesJson.map((json) => Category.fromJson(jsonDecode(json))),
-      );
-    } else {
-      _categories.addAll(_getDefaultCategories());
-    }
-    
-    // Tüm listeleri yükle
-    final listsJson = prefs.getStringList(_prefsListsKey);
-    if (listsJson != null) {
-      _allLists.clear();
-      _allLists.addAll(
-        listsJson.map((json) => ShoppingList.fromJson(jsonDecode(json))),
-      );
-      
-      // Her listenin öğelerini yükle
-      for (final list in _allLists) {
-        final itemsJson = prefs.getStringList('list_items_${list.id}');
-        if (itemsJson != null) {
-          _shoppingLists[list.id] = itemsJson
-              .map((json) => ShoppingItem.fromJson(jsonDecode(json)))
-              .toList();
-        } else {
-          _shoppingLists[list.id] = [];
-        }
-      }
-      
-      // Aktif listeyi ayarla
-      if (_allLists.isNotEmpty && _activeListId == null) {
-        _activeListId = _allLists.first.id;
-      }
-    }
-    
-    // Liste geçmişini yükle
-    final historyJson = prefs.getStringList('list_history');
-    if (historyJson != null) {
-      _listHistory = historyJson
-          .map((json) => ShoppingList.fromJson(jsonDecode(json)))
-          .toList();
-    }
-    
-    // Silinen öğeleri yükle
-    final deletedJson = prefs.getStringList('deleted_items');
-    if (deletedJson != null) {
-      _deletedItems.addAll(
-        deletedJson.map((json) => ShoppingItem.fromJson(jsonDecode(json))),
-      );
-    }
-    
-    notifyListeners();
+  Future<void> addCustomCategory(String name, IconData icon, Color color) async {
+    final category = Category(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name, 
+      color: color,
+      iconData: icon,
+    );
+    await addCategory(category);
   }
-
-  List<Category> _getDefaultCategories() => [
-    Category(id: 'meyve_sebze', name: 'Meyve & Sebze', iconData: Icons.local_florist, color: Colors.green),
-    Category(id: 'sut_urunleri', name: 'Süt & Kahvaltılık', iconData: Icons.egg, color: Colors.amber),
-    Category(id: 'et_balik', name: 'Et & Balık', iconData: Icons.set_meal, color: Colors.redAccent),
-    Category(id: 'elektronik', name: 'Elektronik', iconData: Icons.devices, color: Colors.blue),
-    Category(id: 'kirtasiye', name: 'Kırtasiye', iconData: Icons.edit, color: Colors.purple),
-    Category(id: 'temizlik', name: 'Temizlik', iconData: Icons.cleaning_services, color: Colors.cyan),
-    Category(id: 'giyim', name: 'Giyim', iconData: Icons.checkroom, color: Colors.pink),
-    Category(id: 'kozmetik', name: 'Kozmetik', iconData: Icons.face, color: Colors.orange),
-    Category(id: 'oyuncak', name: 'Oyuncak & Hobi', iconData: Icons.toys, color: Colors.deepPurple),
-    Category(id: 'ev_esyalari', name: 'Ev Eşyaları', iconData: Icons.chair, color: Colors.brown),
-    Category(id: 'diger', name: 'Diğer', iconData: Icons.more_horiz, color: Colors.grey),
-  ];
 }

@@ -1,62 +1,155 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shopping_list/controllers/shopping_list_controller.dart';
-// import 'views/shopping_list_view.dart'; // Artık direkt bunu çağırmıyoruz
+import 'package:lottie/lottie.dart';
+import '../providers/theme_provider.dart';
+import 'list_selection_view.dart';
 
-class SplashScreen extends StatelessWidget {
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Text('Loading...'),
-      ),
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _backgroundAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
     );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
+    );
+
+    _scaleAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.3, 0.8, curve: Curves.elasticOut),
+    );
+
+    _backgroundAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOut,
+    );
+
+    _controller.forward().then((_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const ListSelectionView(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(
+                opacity: animation,
+                child: child,
+              );
+            },
+            transitionDuration: const Duration(milliseconds: 800),
+          ),
+        );
+      });
+    });
   }
-}
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized(); // Gerekli olabilir
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => ShoppingListController(),
-      child: MaterialApp(
-        title: 'Eğlenceli Alışveriş Listem',
-        theme: ThemeData(
-          primarySwatch: Colors.deepPurple, // Ana tema rengi
-          // Genel font ayarı (isteğe bağlı)
-          // fontFamily: 'YourCustomFont',
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-           // Kart temasını biraz özelleştirelim
-           cardTheme: CardTheme(
-              elevation: 2.0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0))
-           ),
-           // AppBar temasını ayarlayalım
-           appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.deepPurple,
-              foregroundColor: Colors.white,
-              elevation: 0, // Splash ile uyum için 0 olabilir veya Scaffold'da ayarlanır
-              titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)
-           ),
-           // FAB teması
-           floatingActionButtonTheme: FloatingActionButtonThemeData(
-              backgroundColor: Colors.amber.shade700,
-              foregroundColor: Colors.black87,
-           )
-        ),
-        // --- DEĞİŞİKLİK: Başlangıç ekranı SplashScreen ---
-        home: const SplashScreen(),
-        debugShowCheckedModeBanner: false,
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final currentPalette = ThemeProvider.colorPalette.values.toList();
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Animasyonlu arka plan
+          AnimatedBuilder(
+            animation: _backgroundAnimation,
+            builder: (context, child) {
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      currentPalette[(_controller.value * (currentPalette.length - 1)).floor()],
+                      currentPalette[((_controller.value * (currentPalette.length - 1)).floor() + 1) % currentPalette.length],
+                    ],
+                    stops: [0.0, 1.0],
+                  ),
+                ),
+              );
+            },
+          ),
+          // Ana içerik
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Sepet animasyonu
+                ScaleTransition(
+                  scale: _scaleAnimation,
+                  child: Lottie.asset(
+                    'assets/animations/empty_cart.json',
+                    width: 200,
+                    height: 200,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // Uygulama başlığı
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Column(
+                    children: [
+                      Text(
+                        'Alışveriş Listem',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.3),
+                              offset: const Offset(0, 2),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Alışverişinizi Kolaylaştırın',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Colors.white.withOpacity(0.9),
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withOpacity(0.2),
+                              offset: const Offset(0, 1),
+                              blurRadius: 2,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
+
